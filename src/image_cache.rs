@@ -4,7 +4,8 @@
 //! it has loaded. It only ever evicts the textures of `.svg` files, so left
 //! alone a session that scrolls through photos holds every one of them for
 //! good. Each draw site registers its URI here, and [`sweep`] forgets the ones
-//! that fall out of the resident window.
+//! that fall out of the resident window. The window is bounded by both URI
+//! count and offscreen texture bytes: a photo can cost more than many avatars.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -12,6 +13,24 @@ use std::sync::{Arc, Mutex};
 /// Image URIs kept resident. Anything the current frame drew is always kept,
 /// so this only bounds what has scrolled away.
 const RESIDENT: usize = 96;
+const OFFSCREEN_TEXTURE_BYTES: usize = 24 * 1024 * 1024;
+
+#[derive(Default)]
+struct TextureCost<'a> {
+    bytes: usize,
+    /// egui loads GIF and WebP frames as separate texture URIs.
+    frames: Vec<&'a str>,
+}
+
+fn frame_source(name: &str) -> Option<&str> {
+    let (uri, index) = name.rsplit_once('#')?;
+    let extension = uri.rsplit_once('.')?.1;
+    if extension.eq_ignore_ascii_case("gif") || extension.eq_ignore_ascii_case("webp") {
+        index.parse::<usize>().ok().map(|_| uri)
+    } else {
+        None
+    }
+}
 
 struct Entry {
     /// Frame the image was last drawn on.
@@ -91,10 +110,20 @@ pub fn forget(ctx: &egui::Context, uri: &str) {
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .remove(uri);
+    let frames: Vec<String> = ctx
+        .tex_manager()
+        .read()
+        .allocated()
+        .filter(|(_, texture)| frame_source(&texture.name) == Some(uri))
+        .map(|(_, texture)| texture.name.clone())
+        .collect();
+    for frame in frames {
+        ctx.forget_image(&frame);
+    }
     ctx.forget_image(uri);
 }
 
-/// Forgets the images that have not been drawn for the longest.
+/// Keeps recent offscreen images within the count and texture byte budgets.
 ///
 /// Images the current frame drew are never forgotten, so a frame that shows
 /// more than `RESIDENT` images does not reload them on the next one.
@@ -103,21 +132,52 @@ pub fn sweep(ctx: &egui::Context) {
     let stale: Vec<String> = {
         let registry = registry(ctx);
         let mut entries = registry.0.lock().unwrap_or_else(|p| p.into_inner());
-        let over = entries.len().saturating_sub(RESIDENT);
-        if over == 0 {
+        if entries.values().all(|entry| entry.frame == frame) {
             return;
         }
-        let mut idle: Vec<(u64, String)> = entries
+
+        let manager = ctx.tex_manager();
+        let textures = manager.read();
+        let mut costs = HashMap::<&str, TextureCost<'_>>::new();
+        for (_, texture) in textures.allocated() {
+            let name = texture.name.as_str();
+            let uri = frame_source(name).unwrap_or(name);
+            if entries.get(uri).is_some_and(|entry| entry.frame < frame) {
+                let cost = costs.entry(uri).or_default();
+                cost.bytes += texture.bytes_used();
+                if uri != name {
+                    cost.frames.push(name);
+                }
+            }
+        }
+        if entries.len() <= RESIDENT
+            && costs.values().map(|cost| cost.bytes).sum::<usize>() <= OFFSCREEN_TEXTURE_BYTES
+        {
+            return;
+        }
+
+        let mut idle: Vec<_> = entries
             .iter()
-            .filter(|(_, entry)| entry.frame < frame)
-            .map(|(uri, entry)| (entry.frame, uri.clone()))
+            .filter_map(|(uri, entry)| (entry.frame < frame).then_some((entry.frame, uri)))
             .collect();
-        idle.sort_unstable();
-        idle.truncate(over);
-        for (_, uri) in &idle {
+        idle.sort_unstable_by_key(|entry| std::cmp::Reverse(*entry));
+        let mut slots = RESIDENT.saturating_sub(entries.len() - idle.len());
+        let mut bytes = OFFSCREEN_TEXTURE_BYTES;
+        let mut stale = Vec::new();
+        for (_, uri) in idle {
+            let cost = costs.remove(uri.as_str()).unwrap_or_default();
+            if slots > 0 && cost.bytes <= bytes {
+                slots -= 1;
+                bytes -= cost.bytes;
+            } else {
+                stale.push(uri.clone());
+                stale.extend(cost.frames.into_iter().map(str::to_owned));
+            }
+        }
+        for uri in &stale {
             entries.remove(uri);
         }
-        idle.into_iter().map(|(_, uri)| uri).collect()
+        stale
     };
     for uri in stale {
         ctx.forget_image(&uri);
@@ -150,7 +210,7 @@ mod tests {
 
     /// Answers in the same frame, so a test can watch a texture being
     /// allocated without waiting on a decoding thread.
-    struct ReadyLoader;
+    struct ReadyLoader(Arc<egui::ColorImage>);
 
     impl egui::load::ImageLoader for ReadyLoader {
         fn id(&self) -> &str {
@@ -164,7 +224,7 @@ mod tests {
             _size_hint: egui::load::SizeHint,
         ) -> egui::load::ImageLoadResult {
             Ok(egui::load::ImagePoll::Ready {
-                image: std::sync::Arc::new(egui::ColorImage::example()),
+                image: Arc::clone(&self.0),
             })
         }
 
@@ -253,7 +313,7 @@ mod tests {
     #[test]
     fn images_that_scroll_away_free_their_texture() {
         let ctx = context();
-        ctx.add_image_loader(std::sync::Arc::new(ReadyLoader));
+        ctx.add_image_loader(Arc::new(ReadyLoader(Arc::new(egui::ColorImage::example()))));
         let uris: Vec<String> = (0..RESIDENT + 8).map(uri).collect();
         for uri in &uris {
             include(&ctx, uri, b"image bytes");
@@ -277,5 +337,61 @@ mod tests {
         );
         assert_eq!(allocated(&ctx), shown - 8);
         empty.textures_delta.clear();
+    }
+
+    #[test]
+    fn large_offscreen_photos_fit_the_byte_budget_below_the_uri_limit() {
+        let ctx = context();
+        let size = [2048, 1024];
+        ctx.add_image_loader(Arc::new(ReadyLoader(Arc::new(egui::ColorImage::filled(
+            size,
+            egui::Color32::WHITE,
+        )))));
+        let uris: Vec<_> = (0..8).map(uri).collect();
+        for uri in &uris {
+            touch(&ctx, uri);
+        }
+        drop(draw(&ctx, &uris));
+
+        let after_scrolling = ctx.run_ui(egui::RawInput::default(), |ui| {
+            touch(ui.ctx(), &uris[0]);
+            ui.add(egui::Image::from_uri(uris[0].clone()));
+            sweep(ui.ctx());
+        });
+        assert_eq!(after_scrolling.textures_delta.free.len(), 4);
+        let manager = ctx.tex_manager();
+        let textures = manager.read();
+        let still_resident: Vec<_> = textures
+            .allocated()
+            .filter(|(_, texture)| uris.contains(&texture.name))
+            .map(|(_, texture)| texture)
+            .collect();
+        assert!(still_resident.iter().any(|texture| texture.name == uris[0]));
+        let offscreen: usize = still_resident
+            .into_iter()
+            .filter(|texture| texture.name != uris[0])
+            .map(egui::epaint::textures::TextureMeta::bytes_used)
+            .sum();
+        assert_eq!(offscreen, OFFSCREEN_TEXTURE_BYTES);
+    }
+
+    #[test]
+    fn removing_an_animation_releases_all_of_its_uploaded_frames() {
+        let ctx = context();
+        ctx.add_image_loader(Arc::new(ReadyLoader(Arc::new(egui::ColorImage::example()))));
+        let uri = "file:///sticker.webp";
+        for index in 0..3 {
+            assert!(matches!(
+                ctx.try_load_texture(
+                    &format!("{uri}#{index}"),
+                    egui::TextureOptions::LINEAR,
+                    egui::load::SizeHint::default(),
+                ),
+                Ok(egui::load::TexturePoll::Ready { .. })
+            ));
+        }
+        let before = allocated(&ctx);
+        forget(&ctx, uri);
+        assert_eq!(allocated(&ctx), before - 3);
     }
 }
