@@ -664,7 +664,7 @@ pub fn populate(app: &mut App) {
                 base + 120,
                 Content::text("Listened, agreed on *all three* points."),
             );
-            row.quoted = Some(Quoted {
+            row.quoted = Some(Box::new(Quoted {
                 labelled: None,
                 chat: None,
                 id: "ada-voice".into(),
@@ -672,7 +672,7 @@ pub fn populate(app: &mut App) {
                 sender_name: Some("Ada Lovelace".into()),
                 summary: "Voice message (0:42)".into(),
                 mentions: Vec::new(),
-            });
+            }));
             row.edited = true;
             row.status = Delivery::Delivered;
             row
@@ -880,7 +880,7 @@ pub fn populate(app: &mut App) {
             );
             row.sender = mira.0.to_owned();
             row.sender_name = Some(mira.1.to_owned());
-            row.quoted = Some(Quoted {
+            row.quoted = Some(Box::new(Quoted {
                 labelled: None,
                 chat: None,
                 id: format!("{group}-3"),
@@ -888,7 +888,7 @@ pub fn populate(app: &mut App) {
                 sender_name: Some(jonas.1.into()),
                 summary: "Save me a seat 🙏".into(),
                 mentions: Vec::new(),
-            });
+            }));
             row.mentions = vec![MentionRef {
                 user: jonas.0.split('@').next().unwrap_or_default().to_owned(),
                 id: jonas.0.to_owned(),
@@ -1134,7 +1134,7 @@ fn quote_sample(app: &mut App) {
             original.timestamp + 30,
             Content::text("See you there!"),
         );
-        reply.quoted = Some(Quoted {
+        reply.quoted = Some(Box::new(Quoted {
             labelled: None,
             chat: None,
             id: "group-reply".into(),
@@ -1142,7 +1142,7 @@ fn quote_sample(app: &mut App) {
             sender_name,
             summary,
             mentions,
-        });
+        }));
         conversation.messages.insert(index + 1, reply);
     }
 }
@@ -1168,7 +1168,7 @@ fn meta_ai_sample(app: &mut App) {
             "Collect its characters in reverse order:\n\n```\nlet reversed: String = text.chars().rev().collect();\n```\n\nMethod | Handles\nchars().rev() | Unicode scalar values\ngraphemes(true).rev() | Combined emoji and accents",
         ),
     );
-    reply.quoted = Some(Quoted {
+    reply.quoted = Some(Box::new(Quoted {
         labelled: None,
         chat: None,
         id: "meta-ai-question".into(),
@@ -1176,7 +1176,7 @@ fn meta_ai_sample(app: &mut App) {
         sender_name: None,
         summary: "How do I reverse a string in Rust?".into(),
         mentions: Vec::new(),
-    });
+    }));
     let mut chat = Chat::new(id.into(), "Meta AI".into());
     chat.last_activity = now;
     chat.last = Some(crate::model::LastMessage {
@@ -1279,7 +1279,7 @@ fn interactive_sample(app: &mut App, with_image: bool) {
             card: None,
         },
     );
-    reply.quoted = Some(Quoted {
+    reply.quoted = Some(Box::new(Quoted {
         labelled: None,
         chat: None,
         id: "interactive-card".into(),
@@ -1287,7 +1287,7 @@ fn interactive_sample(app: &mut App, with_image: bool) {
         sender_name: Some("Cedar Studio".into()),
         summary: body.lines().next().unwrap().into(),
         mentions: Vec::new(),
-    });
+    }));
     messages.push(reply);
     messages.push(message(
         id,
@@ -1746,7 +1746,7 @@ fn bubbles_sample(app: &mut App) {
         ),
         message(id, "bubbles-out-4", true, 0, text("Then coffee is on me")),
     ];
-    rows[4].quoted = Some(crate::model::Quoted {
+    rows[4].quoted = Some(Box::new(crate::model::Quoted {
         labelled: None,
         id: "bubbles-in-2".into(),
         sender: id.into(),
@@ -1754,7 +1754,7 @@ fn bubbles_sample(app: &mut App) {
         summary: "The ferry leaves at four".into(),
         mentions: Vec::new(),
         chat: None,
-    });
+    }));
     for (index, row) in rows.iter_mut().enumerate() {
         row.timestamp = now - 1200 + index as i64 * 60;
     }
@@ -2132,7 +2132,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 media_album_sample(app, true);
                 let messages = &mut app.conversations.get_mut(SAMPLES[0].id).unwrap().messages;
                 for message in messages {
-                    message.quoted = Some(crate::model::Quoted {
+                    message.quoted = Some(Box::new(crate::model::Quoted {
                         labelled: Some(false),
                         id: "synthetic-quoted-message".into(),
                         sender: SAMPLES[0].id.into(),
@@ -2140,7 +2140,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                         summary: "A reference for the album".into(),
                         mentions: Vec::new(),
                         chat: None,
-                    });
+                    }));
                 }
             }
             "media-album-failed" => {
@@ -2157,7 +2157,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 let (saved, _) = sample_files(app);
                 let messages = &mut app.conversations.get_mut(SAMPLES[0].id).unwrap().messages;
                 messages[3].content.media_at_mut(None).unwrap().path = Some(saved);
-                messages[2].quoted = Some(crate::model::Quoted {
+                messages[2].quoted = Some(Box::new(crate::model::Quoted {
                     labelled: None,
                     id: "synthetic-quoted-message".into(),
                     sender: SAMPLES[0].id.into(),
@@ -2165,7 +2165,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     summary: "A reference for the album".into(),
                     mentions: Vec::new(),
                     chat: None,
-                });
+                }));
             }
             "media-album-oversized" => {
                 media_album_sample(app, true);
@@ -2494,7 +2494,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                 for (id, own) in [("arabic-incoming", false), ("arabic-outgoing", true)] {
                     let mut reply =
                         message(chat, id, own, now - 60, Content::text("Reply preview test"));
-                    reply.quoted = Some(Quoted {
+                    reply.quoted = Some(Box::new(Quoted {
                         labelled: None,
                         chat: None,
                         id: "arabic-original".into(),
@@ -2502,7 +2502,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                         sender_name: Some("Demo contact".into()),
                         summary: "مساء الخير".into(),
                         mentions: Vec::new(),
-                    });
+                    }));
                     messages.push(reply);
                 }
                 app.conversations.get_mut(chat).unwrap().messages = messages;
@@ -2532,7 +2532,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     {
                         let mut reply =
                             message(id, "rtl-reply", true, now, Content::text("שלום עולם"));
-                        reply.quoted = Some(Quoted {
+                        reply.quoted = Some(Box::new(Quoted {
                             labelled: None,
                             chat: None,
                             id: "rtl-hebrew".into(),
@@ -2540,7 +2540,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                             sender_name: Some("שלום עולם".into()),
                             summary: "הכלב הגדול קפץ 🐕".into(),
                             mentions: Vec::new(),
-                        });
+                        }));
                         reply
                     },
                     // Numbers keep their left-to-right order inside
@@ -2550,7 +2550,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                     {
                         let text = Content::text("עולה 3.14 ש״ח");
                         let mut reply = message(id, "rtl-digits-reply", false, now, text);
-                        reply.quoted = Some(Quoted {
+                        reply.quoted = Some(Box::new(Quoted {
                             labelled: None,
                             chat: None,
                             id: "rtl-digits".into(),
@@ -2558,7 +2558,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>) {
                             sender_name: None,
                             summary: "٤٥".into(),
                             mentions: Vec::new(),
-                        });
+                        }));
                         reply
                     },
                 ];
@@ -8000,15 +8000,16 @@ mod tests {
         let mut on = app_on_attachment(Content::text("Agreed"));
         let target = on.app.conversations[&on.chat].messages[0].clone();
         let conversation = on.app.conversations.get_mut(&on.chat).unwrap();
-        conversation.message_mut("key-fixture").unwrap().quoted = Some(crate::model::Quoted {
-            labelled: None,
-            chat: None,
-            id: target.id.clone(),
-            sender: target.sender.clone(),
-            sender_name: None,
-            summary: target.summary(),
-            mentions: Vec::new(),
-        });
+        conversation.message_mut("key-fixture").unwrap().quoted =
+            Some(Box::new(crate::model::Quoted {
+                labelled: None,
+                chat: None,
+                id: target.id.clone(),
+                sender: target.sender.clone(),
+                sender_name: None,
+                summary: target.summary(),
+                mentions: Vec::new(),
+            }));
         render(&mut on.app, &on.ctx);
         (on, target.id)
     }
@@ -8026,15 +8027,16 @@ mod tests {
             Content::text("Long ago"),
         );
         let conversation = on.app.conversations.get_mut(&on.chat).unwrap();
-        conversation.message_mut("key-fixture").unwrap().quoted = Some(crate::model::Quoted {
-            labelled: None,
-            chat: None,
-            id: target.id.clone(),
-            sender: target.sender.clone(),
-            sender_name: None,
-            summary: target.summary(),
-            mentions: Vec::new(),
-        });
+        conversation.message_mut("key-fixture").unwrap().quoted =
+            Some(Box::new(crate::model::Quoted {
+                labelled: None,
+                chat: None,
+                id: target.id.clone(),
+                sender: target.sender.clone(),
+                sender_name: None,
+                summary: target.summary(),
+                mentions: Vec::new(),
+            }));
         render(&mut on.app, &on.ctx);
         (on, target)
     }
@@ -8211,15 +8213,16 @@ mod tests {
     fn quote_the_oldest(on: &mut OnAttachment) -> String {
         let target = on.app.conversations[&on.chat].messages[0].clone();
         let conversation = on.app.conversations.get_mut(&on.chat).unwrap();
-        conversation.message_mut("key-fixture").unwrap().quoted = Some(crate::model::Quoted {
-            labelled: None,
-            chat: None,
-            id: target.id.clone(),
-            sender: target.sender.clone(),
-            sender_name: None,
-            summary: target.summary(),
-            mentions: Vec::new(),
-        });
+        conversation.message_mut("key-fixture").unwrap().quoted =
+            Some(Box::new(crate::model::Quoted {
+                labelled: None,
+                chat: None,
+                id: target.id.clone(),
+                sender: target.sender.clone(),
+                sender_name: None,
+                summary: target.summary(),
+                mentions: Vec::new(),
+            }));
         render(&mut on.app, &on.ctx);
         target.id
     }
@@ -20044,7 +20047,7 @@ mod tests {
                 },
             );
             if kind == "quote" {
-                row.quoted = Some(Quoted {
+                row.quoted = Some(Box::new(Quoted {
                     labelled: None,
                     chat: None,
                     id: "original".into(),
@@ -20052,7 +20055,7 @@ mod tests {
                     sender_name: Some("Fixture".into()),
                     summary: "Original text".into(),
                     mentions: Vec::new(),
-                });
+                }));
             }
             app.conversations.get_mut(&chat).unwrap().messages = vec![
                 message(
@@ -21149,7 +21152,7 @@ mod tests {
                 original.timestamp + 1,
                 Content::text("See you there"),
             );
-            reply.quoted = Some(Quoted {
+            reply.quoted = Some(Box::new(Quoted {
                 labelled: Some(original.content.labelled()),
                 chat: Some(group.into()),
                 id: original.id,
@@ -21157,7 +21160,7 @@ mod tests {
                 sender_name: original.sender_name,
                 summary: original.content.summary(),
                 mentions: original.mentions,
-            });
+            }));
             app.chats.push(Chat::new(chat.clone(), "Tom".into()));
             app.conversations.insert(
                 chat.clone(),

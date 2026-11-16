@@ -19469,14 +19469,16 @@ mod tests {
         someone_else.mentions = vec![mention("15550002222", "15550002222@s.whatsapp.net")];
         assert!(!app.addresses_us(&someone_else));
 
-        let quote = |sender: &str| crate::model::Quoted {
-            labelled: None,
-            chat: None,
-            id: "earlier".into(),
-            sender: sender.into(),
-            sender_name: None,
-            summary: "earlier".into(),
-            mentions: Vec::new(),
+        let quote = |sender: &str| {
+            Box::new(crate::model::Quoted {
+                labelled: None,
+                chat: None,
+                id: "earlier".into(),
+                sender: sender.into(),
+                sender_name: None,
+                summary: "earlier".into(),
+                mentions: Vec::new(),
+            })
         };
         let mut reply = plain.clone();
         reply.quoted = Some(quote("15550001111@s.whatsapp.net"));
@@ -27020,7 +27022,7 @@ mod app_lock_tests {
             id: "15550001111@s.whatsapp.net".into(),
         }];
         let mut reply = plain.clone();
-        reply.quoted = Some(crate::model::Quoted {
+        reply.quoted = Some(Box::new(crate::model::Quoted {
             labelled: None,
             chat: None,
             id: "earlier".into(),
@@ -27028,7 +27030,7 @@ mod app_lock_tests {
             sender_name: None,
             summary: "earlier".into(),
             mentions: Vec::new(),
-        });
+        }));
 
         app.account_mut().settings.limit_notifications = crate::settings::NotificationLimit::Group;
         app.maybe_notify(GROUP, &mention);

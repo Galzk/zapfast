@@ -13303,7 +13303,7 @@ mod reaction_tests {
         forwarded.forwarded = true;
         assert!(!bare_picture(&messages, &forwarded));
         let mut quoting = photo(None);
-        quoting.quoted = Some(crate::model::Quoted {
+        quoting.quoted = Some(Box::new(crate::model::Quoted {
             labelled: None,
             chat: None,
             id: "q".into(),
@@ -13311,7 +13311,7 @@ mod reaction_tests {
             sender_name: None,
             summary: "hi".into(),
             mentions: Vec::new(),
-        });
+        }));
         assert!(!bare_picture(&messages, &quoting));
         assert!(!bare_picture(&messages, &with_reactions(Vec::new())));
     }

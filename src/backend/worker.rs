@@ -1873,7 +1873,7 @@ struct ParsedMessage {
     edited: bool,
     content: Content,
     status: Delivery,
-    quoted: Option<Quoted>,
+    quoted: Option<Box<Quoted>>,
     reactions: Vec<(Option<String>, bool, String)>,
     mentions: Vec<String>,
     forwarded: bool,
@@ -5292,7 +5292,7 @@ impl Worker {
                 return;
             }
         }
-        let quoted = self.quoted_of(base);
+        let quoted = self.quoted_of(base).map(Box::new);
         let mentions = self.mentions_of(&recorded_mention_ids(base));
         let row = Message {
             id: info.id.to_string(),
@@ -6465,14 +6465,11 @@ impl Worker {
                         emoji,
                     })
                     .collect();
-                let quoted = message.quoted.map(|quoted| {
-                    let sender = self.canonical_str(&quoted.sender);
-                    Quoted {
-                        chat: quoted.chat.as_deref().map(|chat| self.canonical_str(chat)),
-                        sender_name: self.name_for(&sender),
-                        sender,
-                        ..quoted
-                    }
+                let quoted = message.quoted.map(|mut quoted| {
+                    quoted.chat = quoted.chat.as_deref().map(|chat| self.canonical_str(chat));
+                    quoted.sender = self.canonical_str(&quoted.sender);
+                    quoted.sender_name = self.name_for(&quoted.sender);
+                    quoted
                 });
                 let mentions = self.mentions_of(&message.mentions);
                 // A direct chat's receipt times date its ticks. A group's may
@@ -9548,7 +9545,7 @@ impl Worker {
             status: Delivery::Pending,
             delivered_at: None,
             read_at: None,
-            quoted: shown,
+            quoted: shown.map(Box::new),
             reactions: Vec::new(),
             history_order: None,
             edited: false,
@@ -9666,7 +9663,7 @@ impl Worker {
             status: Delivery::Pending,
             delivered_at: None,
             read_at: None,
-            quoted: shown,
+            quoted: shown.map(Box::new),
             reactions: Vec::new(),
             history_order: None,
             edited: false,
@@ -11672,7 +11669,7 @@ impl Worker {
             .await;
             match outcome {
                 Ok((mut row, raw)) => {
-                    row.quoted = shown;
+                    row.quoted = shown.map(Box::new);
                     let _ = commands.send(Command::Outbound {
                         chat,
                         row: Box::new(row),
@@ -13910,7 +13907,7 @@ async fn quoted_outbound(
 ) -> Result<(Message, Vec<u8>), String> {
     let shown = attach_quote(&mut prepared.message, quote)?;
     let (mut row, raw) = file_outbound(client, chat, me, dir, prepared, caption, mentions).await?;
-    row.quoted = shown;
+    row.quoted = shown.map(Box::new);
     Ok((row, raw))
 }
 
@@ -14148,11 +14145,11 @@ fn fill_from_edit(message: &mut ParsedMessage, body: &wa::Message, secret: Vec<u
 }
 
 /// The message a history message replies to, as its context names it.
-fn history_quote(base: &wa::Message) -> Option<Quoted> {
+fn history_quote(base: &wa::Message) -> Option<Box<Quoted>> {
     let context = context_of(base)?;
     let id = context.stanza_id.clone().filter(|id| !id.is_empty())?;
     let content = context.quoted_message.as_option().and_then(classify);
-    Some(Quoted {
+    Some(Box::new(Quoted {
         labelled: content.as_ref().map(Content::labelled),
         chat: context.remote_jid.clone(),
         mentions: Vec::new(),
@@ -14160,7 +14157,7 @@ fn history_quote(base: &wa::Message) -> Option<Quoted> {
         sender: context.participant.clone().unwrap_or_default(),
         sender_name: None,
         summary: content.as_ref().map(Content::summary).unwrap_or_default(),
-    })
+    }))
 }
 
 /// Converts supported protocol message content into local display types, retaining quoted source metadata.
@@ -15178,7 +15175,7 @@ mod tests {
             status: Delivery::Sent,
             delivered_at: None,
             read_at: None,
-            quoted: Some(Quoted {
+            quoted: Some(Box::new(Quoted {
                 labelled: None,
                 chat: None,
                 id: "quoted".into(),
@@ -15186,7 +15183,7 @@ mod tests {
                 sender_name: sender_name.map(str::to_owned),
                 summary: "quoted message".into(),
                 mentions: Vec::new(),
-            }),
+            })),
             reactions: Vec::new(),
             history_order: None,
             edited: false,
@@ -17803,7 +17800,7 @@ mod tests {
             )
             .await
             .unwrap();
-            assert_eq!(row.quoted, Some(quote.clone()));
+            assert_eq!(row.quoted.as_deref(), Some(&quote));
             if view_once {
                 assert_eq!(
                     row.content,
@@ -18603,7 +18600,7 @@ mod tests {
             status: Delivery::Read,
             delivered_at: Some(11),
             read_at: Some(12),
-            quoted: Some(Quoted {
+            quoted: Some(Box::new(Quoted {
                 labelled: None,
                 chat: None,
                 id: "quoted".into(),
@@ -18611,7 +18608,7 @@ mod tests {
                 sender_name: Some("Bob".into()),
                 summary: "earlier".into(),
                 mentions: Vec::new(),
-            }),
+            })),
             reactions: vec![Reaction {
                 sender: "two@s.whatsapp.net".into(),
                 from_me: false,
@@ -23860,7 +23857,7 @@ mod receipt_tests {
                 assert_eq!(worker.quoted_of(&decoded).unwrap().id, "original");
                 let row = Message {
                     chat: chat.into(),
-                    quoted: Some(shown),
+                    quoted: Some(Box::new(shown)),
                     content: Content::text("Reply fixture"),
                     ..own_message("reply", 101)
                 };
@@ -23966,7 +23963,7 @@ mod receipt_tests {
             Some(group)
         );
         let mut sent = own_message("private-reply", 101);
-        sent.quoted = Some(shown.clone());
+        sent.quoted = Some(Box::new(shown.clone()));
         worker
             .archive
             .insert_message(&sent, Some(&reply.encode_to_vec()))
@@ -23978,7 +23975,7 @@ mod receipt_tests {
                 .unwrap()
                 .unwrap()
                 .quoted,
-            Some(shown)
+            Some(Box::new(shown))
         );
         assert_eq!(
             worker

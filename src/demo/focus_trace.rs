@@ -1197,7 +1197,7 @@ fn replying_to(target: usize) -> App {
     let chat = app.open_chat.clone().expect("the demo opens a chat");
     let conversation = app.conversations.get_mut(&chat).expect("its messages");
     let quoted = conversation.messages[target].clone();
-    conversation.messages[399].quoted = Some(crate::model::Quoted {
+    conversation.messages[399].quoted = Some(Box::new(crate::model::Quoted {
         labelled: None,
         chat: None,
         id: quoted.id.clone(),
@@ -1205,7 +1205,7 @@ fn replying_to(target: usize) -> App {
         sender_name: None,
         summary: quoted.summary(),
         mentions: Vec::new(),
-    });
+    }));
     app
 }
 

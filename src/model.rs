@@ -595,7 +595,8 @@ pub struct Message {
     /// First read or played receipt Unix timestamp.
     #[serde(default)]
     pub read_at: Option<i64>,
-    pub quoted: Option<Quoted>,
+    /// A reply's quote. Keep it out of line so ordinary messages stay small.
+    pub quoted: Option<Box<Quoted>>,
     pub reactions: Vec<Reaction>,
     pub edited: bool,
     /// Mentions in the text or caption.
@@ -3527,13 +3528,13 @@ mod tests {
     #[test]
     fn archived_quotes_without_a_source_chat_remain_readable() {
         let old = r#"{"id":"original","sender":"sender@lid","sender_name":null,"summary":"Fixture","mentions":[]}"#;
-        let mut quote: super::Quoted = serde_json::from_str(old).unwrap();
+        let mut quote: Box<super::Quoted> = serde_json::from_str(old).unwrap();
         assert_eq!(quote.chat, None);
         quote.chat = Some("fixture@g.us".into());
         let stored = serde_json::to_string(&quote).unwrap();
         assert_eq!(
             serde_json::from_str::<super::Quoted>(&stored).unwrap(),
-            quote
+            *quote
         );
     }
 

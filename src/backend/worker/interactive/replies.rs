@@ -266,7 +266,7 @@ impl Worker {
             status: Delivery::Pending,
             delivered_at: None,
             read_at: None,
-            quoted: Some(Quoted {
+            quoted: Some(Box::new(Quoted {
                 labelled: Some(source.content.labelled()),
                 chat: None,
                 mentions: source.mentions,
@@ -274,7 +274,7 @@ impl Worker {
                 sender_name: source.sender_name.or_else(|| self.name_for(&source.sender)),
                 sender: source.sender,
                 summary: source.content.summary(),
-            }),
+            })),
             reactions: Vec::new(),
             history_order: None,
             edited: false,

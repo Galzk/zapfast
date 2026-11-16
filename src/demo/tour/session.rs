@@ -370,12 +370,12 @@ pub(super) fn update_call(app: &mut App, change: impl FnOnce(&mut crate::calls::
 }
 
 /// Resolves an explicit quote source rather than assuming it belongs to the destination chat.
-fn quote(app: &App, chat: &str, target: crate::model::ReplyTarget) -> Option<Quoted> {
+fn quote(app: &App, chat: &str, target: crate::model::ReplyTarget) -> Option<Box<Quoted>> {
     let row = app
         .conversations
         .get(target.source_chat(chat))?
         .message(&target.id)?;
-    Some(Quoted {
+    Some(Box::new(Quoted {
         labelled: Some(row.content.labelled()),
         chat: target.chat,
         sender: row.sender.clone(),
@@ -383,7 +383,7 @@ fn quote(app: &App, chat: &str, target: crate::model::ReplyTarget) -> Option<Quo
         summary: row.summary(),
         mentions: row.mentions.clone(),
         id: target.id,
-    })
+    }))
 }
 
 fn outgoing(app: &App, chat: &str, content: Content) -> Message {
